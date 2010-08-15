@@ -1,5 +1,6 @@
 # python playercounter.py /path/to/server.log
 
+import datetime
 import MySQLdb
 import os.path
 import os
@@ -186,15 +187,37 @@ create table mc_visitor (
     date_joined datetime,
     date_left datetime null
 );
-create index name (name) on mc_visitor;
+create index name on mc_visitor (name);
+create unique index name_date on mc_visitor (name, date_joined);
 """
 
 class LogParser(object):
-    def __init__(self):
+    def __init__(self, logfile):
         self.visitor_stack = {}
+        self.logfile = logfile
+    
+    def handle_disconnect(self, player, date):
+        visitor_id = self.visitor_stack.pop(player, None)
+        if visitor_id:
+            print "%s (%s) has disconnected" % (player, visitor_id)
+            cursor = db.cursor()
+            cursor.execute("update mc_visitor set date_left = %s where id = %s", [date, visitor_id])
+            cursor.close()
         
+    def handle_connect(self, player, date):
+        self.handle_disconnect(player, date)
+        cursor = db.cursor()
+        cursor.execute('insert ignore into mc_visitor (name, date_joined) values(%s, %s)', [player, date])
+        visitor_id = db.insert_id()
+        if not visitor_id:
+            cursor.execute('select id from mc_visitor where name = %s and date_joined = %s', [player, date])
+            visitor_id = cursor.fetchone()[0]
+        cursor.close()
+        self.visitor_stack[player] = visitor_id
+        print "%s (%s) has connected" % (player, visitor_id)
+
     def begin(self):
-        for line in Tail(logfile):
+        for line in Tail(self.logfile):
             line = line.strip()
             try:
                 broken = line.split(' ')
@@ -208,42 +231,25 @@ class LogParser(object):
             date = ' '.join(broken[0:2])
             date = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
 
-            if tokens[0].startswith('<') or tokens[0].startswith('/'):
+            if tokens[0].startswith('<') or tokens[0].startswith('/') or tokens[0].startswith('*'):
                 continue
             
             player = None
             if 'Starting minecraft server version' in line:
-                for visitor_id in self.visitor_stack.iterkeys():
-                    db.execute("update mc_visitor set date_left = %s where id = %s", [date, visitor_id])
+                for player in self.visitor_stack.keys():
+                    self.handle_disconnect(player, date)
                 self.visitor_stack = {}
             elif ' lost connection' in line:
                 player = tokens[0]
-
-                visitor_id = self.visitor_stack.pop(player, None)
-                if visitor_id:
-                    db.execute("update mc_visitor set date_left = %s where id = %s", [date, visitor_id])
+                self.handle_disconnect(player, date)
             elif line.endswith(' logged in'):
                 player = tokens[0]
                 
                 # this shouldnt happen
-                visitor_id = self.visitor_stack.pop(player, None)
-                if visitor_id:
-                    db.execute("delete from mc_visitor where id = %s", [visitor_id])
-                
-                db.execute('insert ignore into mc_visitor (name, date_joined) values(%s, %s)', [player, date])
-                visitor_stack[player] = db.insert_id
-            elif ' Banning ' in line:
+                self.handle_connect(player, date)
+            elif ' Banning ' in line or ' Kicking ' in line:
                 player = tokens[-1]
-
-                visitor_id = self.visitor_stack.pop(player, None)
-                if visitor_id:
-                    db.execute("update mc_visitor set date_left = %s where id = %s", [visitor_id, date])
-            elif ' Kicking ' in line:
-                player = tokens[-1]
-
-                visitor_id = self.visitor_stack.pop(player, None)
-                if visitor_id:
-                    db.execute("update mc_visitor set date_left = %s where id = %s", [visitor_id, date])
+                self.handle_disconnect(player, date)
 
 def main(logfile):
     LogParser(logfile).begin()
