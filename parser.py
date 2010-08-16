@@ -1,5 +1,9 @@
 # python playercounter.py /path/to/server.log
 
+DB_USER = "minecraft"
+DB_PASS = ""
+DB_NAME = "minecraft"
+
 import datetime
 import MySQLdb
 import os.path
@@ -10,7 +14,8 @@ from collections import defaultdict
 from stat import ST_SIZE
 from time import sleep, time
 
-db = MySQLdb.connect(user="minecraft", db="minecraft")
+# DB INFORMATION
+db = MySQLdb.connect(user=DB_USER, passwd=DB_PASS, db=DB_NAME)
 
 class Tail(object):
     """The Tail monitor object."""
@@ -179,22 +184,11 @@ class Tail(object):
         """
         return self.nextline()
 
-"""
-create table mc_visitor (
-    id int primary key auto_increment,
-    name varchar(64),
-    ip varchar(32) null,
-    date_joined datetime,
-    date_left datetime null
-);
-create index name on mc_visitor (name);
-create unique index name_date on mc_visitor (name, date_joined);
-"""
-
 class LogParser(object):
-    def __init__(self, logfile):
+    def __init__(self, logfile, server_id=1):
         self.visitor_stack = {}
         self.logfile = logfile
+        self.server_id = server_id
     
     def handle_disconnect(self, player, date):
         visitor_id = self.visitor_stack.pop(player, None)
@@ -207,10 +201,10 @@ class LogParser(object):
     def handle_connect(self, player, date):
         self.handle_disconnect(player, date)
         cursor = db.cursor()
-        cursor.execute('insert ignore into mc_visitor (name, date_joined) values(%s, %s)', [player, date])
+        cursor.execute('insert ignore into mc_visitor (name, date_joined, server_id) values(%s, %s, %s)', [player, date, server_id])
         visitor_id = db.insert_id()
         if not visitor_id:
-            cursor.execute('select id from mc_visitor where name = %s and date_joined = %s', [player, date])
+            cursor.execute('select id from mc_visitor where name = %s and server_id = %s and date_joined = %s', [player, server_id, date])
             visitor_id = cursor.fetchone()[0]
         cursor.close()
         self.visitor_stack[player] = visitor_id
