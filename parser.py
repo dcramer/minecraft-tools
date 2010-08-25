@@ -201,10 +201,10 @@ class LogParser(object):
     def handle_connect(self, player, date):
         self.handle_disconnect(player, date)
         cursor = db.cursor()
-        cursor.execute('insert ignore into mc_visitor (name, date_joined, server_id) values(%s, %s, %s)', [player, date, server_id])
+        cursor.execute('insert ignore into mc_visitor (name, date_joined, server_id) values(%s, %s, %s)', [player, date, self.server_id])
         visitor_id = db.insert_id()
         if not visitor_id:
-            cursor.execute('select id from mc_visitor where name = %s and server_id = %s and date_joined = %s', [player, server_id, date])
+            cursor.execute('select id from mc_visitor where name = %s and server_id = %s and date_joined = %s', [player, self.server_id, date])
             visitor_id = cursor.fetchone()[0]
         cursor.close()
         self.visitor_stack[player] = visitor_id
