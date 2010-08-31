@@ -221,11 +221,12 @@ class LogParser(object):
 
             if not tokens:
                 continue
-
+            
             date = ' '.join(broken[0:2])
             try:
                 date = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
-            except:
+            except Exception, exc:
+                print exc
                 continue
 
             if tokens[0].startswith('<') or tokens[0].startswith('/') or tokens[0].startswith('*'):
