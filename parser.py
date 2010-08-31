@@ -223,7 +223,10 @@ class LogParser(object):
                 continue
 
             date = ' '.join(broken[0:2])
-            date = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
+            try:
+                date = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
+            except:
+                continue
 
             if tokens[0].startswith('<') or tokens[0].startswith('/') or tokens[0].startswith('*'):
                 continue
